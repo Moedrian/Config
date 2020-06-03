@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Config
 {
@@ -77,7 +75,7 @@ namespace Config
         {
             var wholeFile = Read();
 
-            for (int i = 0; i < contents.Length; i++)
+            for (int i = 0; i < contents.GetLength(0); i++)
             {
                 string section = contents[i, 0];
                 string key = contents[i, 1];
@@ -89,8 +87,10 @@ namespace Config
                 }
                 else
                 {
-                    var newKvPair = new Dictionary<string, string>();
-                    newKvPair[key] = value;
+                    var newKvPair = new Dictionary<string, string>
+                    {
+                        [key] = value
+                    };
                     wholeFile[section] = newKvPair;
                 }
             }
@@ -115,7 +115,7 @@ namespace Config
             if(filepath == null)
                 yield break;
 
-            using (StreamReader reader = new StreamReader(filepath))
+            using (var reader = new StreamReader(filepath))
             {
                 string line;
                 while ((line = reader.ReadLine()) != null)
