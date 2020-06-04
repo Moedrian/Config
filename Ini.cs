@@ -70,16 +70,14 @@ namespace Config
         }
 
 
-        // Accepts a 2-D array as argument
-        public void Write(string[,] contents)
+        // Suggests using List to pass argument
+        public void Write(IEnumerable<string[]> contents)
         {
             var wholeFile = Read();
 
-            for (int i = 0; i < contents.GetLength(0); i++)
+            foreach (var combo in contents)
             {
-                string section = contents[i, 0];
-                string key = contents[i, 1];
-                string value = contents[i, 2];
+                var (section, key, value) = (combo[0], combo[1], combo[2]);
 
                 if (wholeFile.ContainsKey(section))
                 {
