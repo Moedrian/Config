@@ -103,6 +103,7 @@ namespace Config
                     {
                         iniWriter.WriteLine(kv.Key + "=" + kv.Value);
                     }
+                    iniWriter.WriteLine(Environment.NewLine);
                 }
             }
         }
