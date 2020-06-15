@@ -9,7 +9,7 @@ namespace Config
     public class Ini
     {
         private readonly string _iniFile;
-        private readonly Regex _sectionMatch = new Regex(@"^[;#/]*?\[.*\]$");
+        private readonly Regex _sectionMatch = new Regex(@"^[;#\/]*?\s*?\[.*\]$");
 
         public Ini(string filepath)
         {

@@ -4,9 +4,9 @@ A C# implementation of reading/writing configuration files.
 
 ## Before You Start
 
-Currently this snippet will erase all the comments and empty lines in
-the original ini file. And it cannot validate if the input file is a 
-valid ini file.
+* This ini parser doesn't support section nesting, yet.
+* `;`, `#` and `//` will be identified as valid comment characters.
+* .Net version 4.7.2 (tuple used)
 
 ## Usage
 
@@ -22,8 +22,13 @@ var iniFile = new Ini(pathToIniFile);
 var contents = Ini.Read();
 
 // argument be like 
-string[,] toBeWriiten = new string[,] {{section, key, value},}
-Ini.Write(toBeWritten);
+Ini.Write(new [] {
+    new [] {
+        "newSection1", "newProperty1", "newValue1"
+    },
+    new [] {
+        "newSection2", "newProperty2", "newValue2"
+    }
+});
 
 ```
-
