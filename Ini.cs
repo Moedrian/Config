@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Linq;
-using System.Reflection.Emit;
 
 namespace Config
 {
@@ -11,7 +10,6 @@ namespace Config
     {
         private readonly string _iniFile;
         private readonly Regex _sectionMatch = new Regex(@"^[;#/]*?\[.*\]$");
-        private char[] _commentChars = { '/', '#', ';' };
 
         public Ini(string filepath)
         {
@@ -48,121 +46,99 @@ namespace Config
         }
 
 
+        private class Section
+        {
+            public string SectionName;
+            public List<string> Properties;
+            public Section(string sectionName, List<string> properties)
+            {
+                SectionName = sectionName;
+                Properties = properties;
+            }
+        }
+
+
         // IEnumerable of string array for less key strokes
         // Uncomment or add section/properties if they are included in contents
-        public void Write(IEnumerable<string[]> triples)
+        public void Write(IEnumerable<string[]> triples, bool keepTemp = false)
         {
             var tmpFile = _iniFile + ".tmp~";
-            var lineCount = File.ReadLines(_iniFile).Count();
+            
+            if (File.Exists(tmpFile))
+                File.Delete(tmpFile);
+
+            File.Copy(_iniFile, tmpFile);
+
+            var fileStart = new List<string>();
+            foreach (var line in File.ReadLines(_iniFile))
+            {
+                if (_sectionMatch.IsMatch(line))
+                    break;
+                fileStart.Add(line);
+            }
+
+            var origin = File.ReadLines(_iniFile).ToList();
+            var segments = DelimitFileBySection(origin).ToList();
+
+            var sections = new List<Section>();
+            foreach (var segment in segments)
+            {
+                var seg = segment.ToList();
+                var title = seg.First();
+                seg.RemoveAt(0);
+                sections.Add(new Section(title, seg));
+            }
+
 
             foreach (var triple in triples)
             {
-                if (File.Exists(tmpFile))
+                var (s, p, v) = (triple[0], triple[1], triple[2]);
+                var sectionChanged = false;
+                var newProperty = $"{p}={v}";
+
+                foreach (var section in sections)
                 {
-                    File.Delete(tmpFile);
-                }
-
-                File.Copy(_iniFile, tmpFile);
-
-                var (inputSection, inputKey, inputValue) = (triple[0], triple[1], triple[2]);
-
-                // find the section to be write, if exists
-                var sectionStart = 1;
-                foreach (var line in File.ReadLines(_iniFile))
-                {
-                    if (line.Contains(inputSection) && line.Contains("[") && line.Contains("]"))
-                        break;
-                    sectionStart++;
-                }
-
-                // If there is no input section exists, the new section will
-                // be append to the end of the ini file
-                if (sectionStart == lineCount)
-                {
-                    using (var sw = new StreamWriter(_iniFile, true))
+                    if (_sectionMatch.IsMatch(section.SectionName) && section.SectionName.Contains(s))
                     {
-                        sw.WriteLine($"[{inputSection}]");
-                        sw.WriteLine($"{inputKey}={inputValue}");
-                    }
-                }
-                else
-                {
-                    // find the section
-                    var sectionEnd = sectionStart;
-                    var cursor = 1;
-                    var block = new List<string>();
-                    foreach (var line in File.ReadLines(_iniFile))
-                    {
-                        if (cursor < sectionStart)
+                        sectionChanged = true;
+                        section.SectionName = $"[{s}]";
+                        var propChanged = false;
+                        var changedIndex = -1;
+
+                        foreach (var prop in section.Properties)
                         {
-                            cursor++;
-                            continue;
-                        }
-                        if (_sectionMatch.IsMatch(line) && sectionEnd > sectionStart || sectionEnd == sectionStart && sectionEnd == lineCount)
-                            break; 
-                        block.Add(line);
-                        sectionEnd++;
-                    }
-
-                    // Uncomment the current section block
-                    block[0] = $"[{inputSection}]";
-                    var propertyIndex = 0;
-                    foreach (var line in block)
-                    {
-                        if (line.Contains(inputKey) && line.Contains("="))
-                            propertyIndex = block.IndexOf(line);
-                    }
-
-                    var newPropertyValue = $"{inputKey}={inputValue}";
-
-                    if (propertyIndex == 0)
-                    {
-                        block.Add(newPropertyValue);
-                    }
-                    else
-                    {
-                        block[propertyIndex] = newPropertyValue;
-                    }
-
-
-                    // Now write the contents back to original file
-                    // Clear the original file
-                    File.WriteAllText(_iniFile, string.Empty);
-                    using (var sw = new StreamWriter(_iniFile, true))
-                    {
-                        // Contents before section to be written
-                        cursor = 1;
-                        foreach (var line in File.ReadLines(tmpFile))
-                        {
-                            if (cursor == sectionStart)
-                                break;
-                            sw.WriteLine(line);
-                            cursor++;
-                        }
-
-                        // the changed section
-                        foreach (var line in block)
-                        {
-                            sw.WriteLine(line);
-                        }
-
-                        // Contents after the section
-                        var leftContentsIndex = 1;
-                        foreach (var line in File.ReadLines(tmpFile))
-                        {
-                            if (leftContentsIndex < sectionEnd)
+                            if (prop.Contains(p) && prop.Contains("="))
                             {
-                                leftContentsIndex++;
-                                continue;
+                                changedIndex = section.Properties.IndexOf(prop);
+                                propChanged = true;
                             }
-
-                            sw.WriteLine(line);
                         }
+
+                        if (propChanged)
+                            section.Properties[changedIndex] = newProperty;
+                        else
+                            section.Properties.Add($"{p}={v}");
                     }
+                }
+                if (!sectionChanged)
+                    sections.Add(new Section($"[{s}]", new List<string>(new []{$"{p}={v}"})));
+            }
+
+            File.WriteAllText(_iniFile, string.Empty);
+            using (var sw = new StreamWriter(_iniFile, true))
+            {
+                foreach (var line in fileStart)
+                    sw.WriteLine(line);
+                foreach (var section in sections)
+                {
+                    sw.WriteLine(section.SectionName);
+                    foreach (var line in section.Properties)
+                        sw.WriteLine(line);
                 }
             }
 
-            File.Delete(tmpFile);
+            if (!keepTemp)
+                File.Delete(tmpFile);
         }
 
 
