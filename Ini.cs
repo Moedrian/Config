@@ -9,7 +9,8 @@ namespace Config
     public class Ini
     {
         private readonly string _iniFile;
-        private readonly Regex _sectionMatch = new Regex(@"^[;#\/]*?\s*?\[.*\]$");
+        private readonly Regex _sectionMatch = new Regex(@"^[;#\/]*?\s*?\[\S+?\]$");
+        private readonly Regex _propertyMatch = new Regex(@"^[;#\/]*?\s*?[a-zA-Z_]+?[\w]+?\s*?=\s*?\S*?$");
 
         public Ini(string filepath)
         {
@@ -63,7 +64,7 @@ namespace Config
         public void Write(IEnumerable<string[]> triples, bool keepTemp = false)
         {
             var tmpFile = _iniFile + ".tmp~";
-            
+
             if (File.Exists(tmpFile))
                 File.Delete(tmpFile);
 
@@ -89,25 +90,25 @@ namespace Config
                 sections.Add(new Section(title, seg));
             }
 
-
             foreach (var triple in triples)
             {
                 var (s, p, v) = (triple[0], triple[1], triple[2]);
                 var sectionChanged = false;
+                var newSectionName = $"[{s}]";
                 var newProperty = $"{p}={v}";
 
                 foreach (var section in sections)
                 {
-                    if (_sectionMatch.IsMatch(section.SectionName) && section.SectionName.Contains(s))
+                    if (section.SectionName.Contains(s))
                     {
                         sectionChanged = true;
-                        section.SectionName = $"[{s}]";
+                        section.SectionName = newSectionName;
                         var propChanged = false;
                         var changedIndex = -1;
 
                         foreach (var prop in section.Properties)
                         {
-                            if (prop.Contains(p) && prop.Contains("="))
+                            if (prop.Contains(p) && _propertyMatch.IsMatch(prop))
                             {
                                 changedIndex = section.Properties.IndexOf(prop);
                                 propChanged = true;
@@ -117,11 +118,11 @@ namespace Config
                         if (propChanged)
                             section.Properties[changedIndex] = newProperty;
                         else
-                            section.Properties.Add($"{p}={v}");
+                            section.Properties.Add(newProperty);
                     }
                 }
                 if (!sectionChanged)
-                    sections.Add(new Section($"[{s}]", new List<string>(new []{$"{p}={v}"})));
+                    sections.Add(new Section(newSectionName, new List<string>(new[] { newProperty })));
             }
 
             File.WriteAllText(_iniFile, string.Empty);
