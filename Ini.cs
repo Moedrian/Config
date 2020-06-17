@@ -4,6 +4,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Linq;
 
+
 namespace Config
 {
     public class Ini
@@ -122,19 +123,29 @@ namespace Config
                     }
                 }
                 if (!sectionChanged)
-                    sections.Add(new Section(newSectionName, new List<string>(new[] { newProperty })));
+                    sections.Add(new Section(Environment.NewLine + newSectionName, new List<string>(new[] { newProperty })));
             }
 
             File.WriteAllText(_iniFile, string.Empty);
+
             using (var sw = new StreamWriter(_iniFile, true))
             {
                 foreach (var line in fileStart)
+                {
+                    if (line.Length == 0)
+                        sw.Write(line);
                     sw.WriteLine(line);
+                }
+
                 foreach (var section in sections)
                 {
                     sw.WriteLine(section.SectionName);
                     foreach (var line in section.Properties)
+                    {
+                        if (line.Length == 0)
+                            sw.Write(line);
                         sw.WriteLine(line);
+                    }
                 }
             }
 
