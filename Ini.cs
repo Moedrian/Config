@@ -10,8 +10,8 @@ namespace Config
     public class Ini
     {
         private readonly string _iniFile;
-        private readonly Regex _sectionMatch = new Regex(@"^[;#\/]*?\s*?\[\S+?\]$");
-        private readonly Regex _propertyMatch = new Regex(@"^[;#\/]*?\s*?[a-zA-Z_]+?[\w]+?\s*?=\s*?\S*?$");
+        private readonly Regex _sectionMatch = new Regex(@"^[;#\/\s]*?\[.+?\]$");
+        private readonly Regex _propertyMatch = new Regex(@"^[;#\/\s]*?\w+?\s*?=.*?$");
 
         public Ini(string filepath)
         {
