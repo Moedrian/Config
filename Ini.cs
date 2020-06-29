@@ -30,22 +30,23 @@ namespace Config
                     if (IsValidLine(line))
                         validLines.Add(line);
 
-                var sections = DelimitFileBySection(validLines);
+                var sections = DelimitBySection(validLines);
 
                 foreach (var section in sections)
                 {
-                    var sectionList = section.ToList();
-                    var sectionName = sectionList.First();
-                    sectionList.RemoveAt(0);
-                    var kvPairs = new Dictionary<string, string>();
+                    var properties = section.ToList();
+                    var sectionTitle = properties.First();
+                    properties.RemoveAt(0);
 
-                    foreach (var kvPair in sectionList)
+                    var kvs = new Dictionary<string, string>();
+
+                    foreach (var property in properties)
                     {
-                        var kv = kvPair.Split('=');
-                        kvPairs.Add(kv[0].Trim(), kv[1].Trim());
+                        var kv = property.Split('=');
+                        kvs.Add(kv[0].Trim(), kv[1].Trim());
                     }
 
-                    ini.Add(sectionName.Trim('[', ']').Trim(), kvPairs);
+                    ini.Add(sectionTitle.Trim('[', ']').Trim(), kvs);
                 }
             }
             catch (FileNotFoundException e)
@@ -64,42 +65,47 @@ namespace Config
 
         private class Section
         {
-            public string SectionName { get; set; }
+            public string SectionTitle { get; set; }
             public List<string> Properties { get; }
-            public Section(string sectionName, List<string> properties)
+            public Section(string sectionTitle, List<string> properties)
             {
-                SectionName = sectionName;
+                SectionTitle = sectionTitle;
                 Properties = properties;
             }
         }
 
 
         // IEnumerable of string array for less key strokes
-        // Uncomment or add section/properties if they are included in contents
+        // Uncomment or add section/properties if they are already included in contents
         public void Write(IEnumerable<string[]> triples, bool keepTemp = false)
         {
+            // If the ini file doesn't exist, create it
             if (File.Exists(_iniFile))
             {
                 FileStream fs = File.Create(_iniFile);
                 fs.Dispose();
             }
 
+            // Temporary file creation
             var tmpFile = _iniFile + ".tmp~";
             if (File.Exists(tmpFile))
                 File.Delete(tmpFile);
 
             File.Copy(_iniFile, tmpFile);
 
-            var fileStart = new List<string>();
+            // Store the contents e.g. comments before valid sections
+            var head = new List<string>();
             foreach (var line in File.ReadLines(_iniFile))
             {
                 if (_sectionMatch.IsMatch(line))
                     break;
-                fileStart.Add(line);
+                head.Add(line);
             }
 
+            // Read all file
             var origin = File.ReadLines(_iniFile).ToList();
-            var segments = DelimitFileBySection(origin).ToList();
+
+            var segments = DelimitBySection(origin).ToList();
 
             var sections = new List<Section>();
             foreach (var segment in segments)
@@ -110,46 +116,51 @@ namespace Config
                 sections.Add(new Section(title, seg));
             }
 
+            // File modification
             foreach (var triple in triples)
             {
-                var (s, p, v) = (triple[0], triple[1], triple[2]);
-                var sectionChanged = false;
-                var newSectionName = $"[{s}]";
-                var newProperty = $"{p}={v}";
+                var (s, k, v) = (triple[0], triple[1], triple[2]);
+                var newSectionTitle = $"[{s}]";
+                var newProperty = $"{k}={v}";
 
-                foreach (var section in sections)
+                var sectionChanged = false;
+
+                foreach (Section section in sections)
                 {
-                    if (section.SectionName.Contains(s))
+                    if (section.SectionTitle.Contains(s))
                     {
                         sectionChanged = true;
-                        section.SectionName = newSectionName;
-                        var propChanged = false;
+                        section.SectionTitle = newSectionTitle;
+                        var propertyChanged = false;
                         var changedIndex = -1;
 
                         foreach (var prop in section.Properties)
                         {
-                            if (prop.Contains(p) && _propertyMatch.IsMatch(prop))
+                            if (prop.Contains(k) && _propertyMatch.IsMatch(prop))
                             {
                                 changedIndex = section.Properties.IndexOf(prop);
-                                propChanged = true;
+                                propertyChanged = true;
                             }
                         }
 
-                        if (propChanged)
+                        if (propertyChanged)
                             section.Properties[changedIndex] = newProperty;
                         else
                             section.Properties.Add(newProperty);
                     }
                 }
+
                 if (!sectionChanged)
-                    sections.Add(new Section(Environment.NewLine + newSectionName, new List<string>(new[] { newProperty })));
+                    sections.Add(new Section(Environment.NewLine + newSectionTitle, new List<string>(new[] { newProperty })));
             }
 
+            // Clear all the contents
             File.WriteAllText(_iniFile, string.Empty);
 
+            // Write new contents
             using (var sw = new StreamWriter(_iniFile, true))
             {
-                foreach (var line in fileStart)
+                foreach (var line in head)
                 {
                     if (line.Length == 0)
                         sw.Write(line);
@@ -158,7 +169,7 @@ namespace Config
 
                 foreach (var section in sections)
                 {
-                    sw.WriteLine(section.SectionName);
+                    sw.WriteLine(section.SectionTitle);
                     foreach (var line in section.Properties)
                     {
                         if (line.Length == 0)
@@ -180,7 +191,7 @@ namespace Config
         }
 
 
-        private IEnumerable<IEnumerable<string>> DelimitFileBySection(IEnumerable<string> rawLines)
+        private IEnumerable<IEnumerable<string>> DelimitBySection(IEnumerable<string> rawLines)
         {
             var lines = rawLines.ToList();
 
