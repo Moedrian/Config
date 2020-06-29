@@ -23,25 +23,39 @@ namespace Config
         {
             var ini = new Dictionary<string, Dictionary<string, string>>();
 
-            var validLines = new List<string>();
-            foreach (var line in File.ReadLines(_iniFile))
-                if (IsValidLine(line))
-                    validLines.Add(line);
-
-            var sections = DelimitFileBySection(validLines);
-
-            foreach (var section in sections)
+            try
             {
-                var sectionList = section.ToList();
-                var sectionName = sectionList.First();
-                sectionList.RemoveAt(0);
-                var kvPairs = new Dictionary<string, string>();
-                foreach (var kvPair in sectionList)
+                var validLines = new List<string>();
+                foreach (var line in File.ReadLines(_iniFile))
+                    if (IsValidLine(line))
+                        validLines.Add(line);
+
+                var sections = DelimitFileBySection(validLines);
+
+                foreach (var section in sections)
                 {
-                    var kv = kvPair.Split('=');
-                    kvPairs.Add(kv[0].Trim(), kv[1].Trim());
+                    var sectionList = section.ToList();
+                    var sectionName = sectionList.First();
+                    sectionList.RemoveAt(0);
+                    var kvPairs = new Dictionary<string, string>();
+
+                    foreach (var kvPair in sectionList)
+                    {
+                        var kv = kvPair.Split('=');
+                        kvPairs.Add(kv[0].Trim(), kv[1].Trim());
+                    }
+
+                    ini.Add(sectionName.Trim('[', ']').Trim(), kvPairs);
                 }
-                ini.Add(sectionName.Trim('[', ']').Trim(), kvPairs);
+            }
+            catch (FileNotFoundException e)
+            {
+                ini.Add("Please Check File Existence", new Dictionary<string, string>
+                {
+                    {"Error Message", e.Message}
+                });
+
+                return ini;
             }
 
             return ini;
@@ -50,8 +64,8 @@ namespace Config
 
         private class Section
         {
-            public string SectionName;
-            public List<string> Properties;
+            public string SectionName { get; set; }
+            public List<string> Properties { get; }
             public Section(string sectionName, List<string> properties)
             {
                 SectionName = sectionName;
@@ -64,8 +78,13 @@ namespace Config
         // Uncomment or add section/properties if they are included in contents
         public void Write(IEnumerable<string[]> triples, bool keepTemp = false)
         {
-            var tmpFile = _iniFile + ".tmp~";
+            if (File.Exists(_iniFile))
+            {
+                FileStream fs = File.Create(_iniFile);
+                fs.Dispose();
+            }
 
+            var tmpFile = _iniFile + ".tmp~";
             if (File.Exists(tmpFile))
                 File.Delete(tmpFile);
 
