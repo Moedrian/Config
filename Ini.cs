@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.Eventing.Reader;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Linq;
@@ -16,6 +17,18 @@ namespace Config
         public Ini(string filepath)
         {
             _iniFile = filepath;
+        }
+
+
+        private class Section
+        {
+            public string SectionTitle { get; set; }
+            public readonly Dictionary<string, string> Properties = new Dictionary<string, string>();
+
+            public Section(string sectionTitle)
+            {
+                SectionTitle = sectionTitle;
+            }
         }
 
 
@@ -63,21 +76,7 @@ namespace Config
         }
 
 
-        private class Section
-        {
-            public string SectionTitle { get; set; }
-            public List<string> Properties { get; }
-            public Section(string sectionTitle, List<string> properties)
-            {
-                SectionTitle = sectionTitle;
-                Properties = properties;
-            }
-        }
-
-
-        // IEnumerable of string array for less key strokes
-        // Uncomment or add section/properties if they are already included in contents
-        public void Write(IEnumerable<string[]> triples, bool keepTemp = false)
+        public void WriteL(IEnumerable<string[]> triples, bool keepTemp = false)
         {
             // If the ini file doesn't exist, create it
             if (File.Exists(_iniFile))
@@ -93,94 +92,52 @@ namespace Config
 
             File.Copy(_iniFile, tmpFile);
 
-            // Store the contents e.g. comments before valid sections
-            var head = new List<string>();
-            foreach (var line in File.ReadLines(_iniFile))
+            var origin = File.ReadAllLines(_iniFile);
+
+            if (origin.Length == 0)
             {
-                if (_sectionMatch.IsMatch(line))
-                    break;
-                head.Add(line);
             }
+            else
+            {
+            }
+        }
 
-            // Read all file
-            var origin = File.ReadLines(_iniFile).ToList();
 
-            var segments = DelimitBySection(origin).ToList();
+        private void OutputSections(IEnumerable<Section> sections)
+        {
+        }
 
+
+        private List<Section> FormatTriples(IReadOnlyCollection<string[]> triples)
+        {
             var sections = new List<Section>();
-            foreach (var segment in segments)
-            {
-                var seg = segment.ToList();
-                var title = seg.First();
-                seg.RemoveAt(0);
-                sections.Add(new Section(title, seg));
-            }
-
-            // File modification
+            
+            var sectionTitles = new List<string>();
             foreach (var triple in triples)
             {
-                var (s, k, v) = (triple[0], triple[1], triple[2]);
-                var newSectionTitle = $"[{s}]";
-                var newProperty = $"{k}={v}";
-
-                var sectionChanged = false;
-
-                foreach (Section section in sections)
-                {
-                    if (section.SectionTitle.Contains(s))
-                    {
-                        sectionChanged = true;
-                        section.SectionTitle = newSectionTitle;
-                        var propertyChanged = false;
-                        var changedIndex = -1;
-
-                        foreach (var prop in section.Properties)
-                        {
-                            if (prop.Contains(k) && _propertyMatch.IsMatch(prop))
-                            {
-                                changedIndex = section.Properties.IndexOf(prop);
-                                propertyChanged = true;
-                            }
-                        }
-
-                        if (propertyChanged)
-                            section.Properties[changedIndex] = newProperty;
-                        else
-                            section.Properties.Add(newProperty);
-                    }
-                }
-
-                if (!sectionChanged)
-                    sections.Add(new Section(Environment.NewLine + newSectionTitle, new List<string>(new[] { newProperty })));
+                var s = triple[0];
+                if (sectionTitles.Contains(s))
+                    continue;
+                sectionTitles.Add(s);
             }
+            
+            foreach (var sectionTitle in sectionTitles)
+                sections.Add(new Section(sectionTitle));
 
-            // Clear all the contents
-            File.WriteAllText(_iniFile, string.Empty);
-
-            // Write new contents
-            using (var sw = new StreamWriter(_iniFile, true))
+            foreach (var triple in triples)
             {
-                foreach (var line in head)
-                {
-                    if (line.Length == 0)
-                        sw.Write(line);
-                    sw.WriteLine(line);
-                }
+                var s = triple[0];
+                var k = triple[1];
+                var v = triple[2];
 
                 foreach (var section in sections)
                 {
-                    sw.WriteLine(section.SectionTitle);
-                    foreach (var line in section.Properties)
-                    {
-                        if (line.Length == 0)
-                            sw.Write(line);
-                        sw.WriteLine(line);
-                    }
+                    if (section.SectionTitle == s)
+                        section.Properties[k] = v;
                 }
             }
 
-            if (!keepTemp)
-                File.Delete(tmpFile);
+            return sections;
         }
 
 
@@ -209,7 +166,8 @@ namespace Config
             {
                 // ArraySegment provides ability to use offset, and no modification of origin array
                 var sectionSegment =
-                    new ArraySegment<string>(lines.ToArray(), sectionIndices[i], sectionIndices[i + 1] - sectionIndices[i]);
+                    new ArraySegment<string>(lines.ToArray(), sectionIndices[i],
+                        sectionIndices[i + 1] - sectionIndices[i]);
                 sections.Add(sectionSegment.ToList());
             }
 
