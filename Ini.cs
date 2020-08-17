@@ -68,6 +68,7 @@ namespace Config
             var lineCount = lines.Count;
 
             var newProperty = _addSpace ? $"{property} = {value}" : $"{property}={value}";
+            var newSection = $"[{section}]";
 
             var targetSectionLine = 0;
             var targetPropertyLine = 0;
@@ -97,6 +98,9 @@ namespace Config
             }
             else
             {
+                if (!IsValidLine(lines[targetSectionLine - 1]))
+                    lines[targetSectionLine - 1] = newSection;
+
                 if (targetPropertyLine == 0)
                 {
                     lines.Insert(targetSectionLine, newProperty);

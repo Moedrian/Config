@@ -1,14 +1,15 @@
 # Config
 
-A C# implementation of reading/writing configuration files.
+A C# simple implementation of reading/writing configuration files.
 
 ## Before You Start
 
 * This ini parser doesn't support section nesting, yet.
 * `;`, `#` and `//` will be identified as valid comment characters.
 * Property names shall follow C-style variable nomenclature.
-* Comments right after property values (i.e. in a same line) will be identified as part of the value.
-* .Net version 4.7.2 (tuple used)
+* Comments right after property values (i.e. in a same line) will be 
+identified as part of the value.
+* .NET Framework 4.0 +
 
 ## Usage
 
@@ -16,21 +17,18 @@ A C# implementation of reading/writing configuration files.
 
 using Config;
 
-// first you need to create a new instance
-var iniFile = new Ini(pathToIniFile);
+// First you need to create a new instance
+// Space for property is disabled by default, i.e. _property=_value 
+// instead of _property = _value
+var iniFile = new Ini(filepath:pathToIniFile, addSpaceForProperty:false);
 
-// returns a Dictionary<string, Dictionary<string, string>> variable
+// Returns a Dictionary<string, Dictionary<string, string>> variable
 // [section -> [key -> value],],
+// Dude this is very PHP
 var contents = Ini.Read();
 
-// argument be like
-Ini.Write(new [] {
-    new [] {
-        "newSection1", "newProperty1", "newValue1"
-    },
-    new [] {
-        "newSection2", "newProperty2", "newValue2"
-    }
-});
+// If _section or _property is commented, this method will uncomment them
+// Arguments be like:
+Ini.WriteProperty("_section", "_property", "_value");
 
 ```
