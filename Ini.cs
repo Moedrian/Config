@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics.Eventing.Reader;
+﻿using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Linq;
@@ -11,12 +9,16 @@ namespace Config
     public class Ini
     {
         private readonly string _iniFile;
+        private readonly bool _addSpace;
+
         private readonly Regex _sectionMatch = new Regex(@"^[;#\/\s]*?\[.+?\]$");
         private readonly Regex _propertyMatch = new Regex(@"^[;#\/\s]*?\w+?\s*?=.*?$");
+        private readonly char[] _validCommentCharacters = {'/', ';', '#'};
 
-        public Ini(string filepath)
+        public Ini(string filepath, bool addSpaceForProperty = false)
         {
             _iniFile = filepath;
+            _addSpace = addSpaceForProperty;
         }
 
 
@@ -62,11 +64,59 @@ namespace Config
 
         public void WriteProperty(string section, string property, string value)
         {
+            var lines = File.ReadLines(_iniFile).ToList();
+            var lineCount = lines.Count;
 
+            var newProperty = _addSpace ? $"{property} = {value}" : $"{property}={value}";
+
+            var targetSectionLine = 0;
+            var targetPropertyLine = 0;
+
+            for (var i = 1; i <= lineCount; i++)
+            {
+                var line = lines[i - 1];
+                if (line.Contains(section))
+                {
+                    targetSectionLine = i;
+                    continue;
+                }
+
+                if (targetSectionLine != 0)
+                {
+                    if (!_propertyMatch.IsMatch(line)) continue;
+                    if (property != line.Split('=')[0].Trim().TrimStart(_validCommentCharacters)) continue;
+                    targetPropertyLine = i;
+                    break;
+                }
+            }
+
+            if (targetSectionLine == 0)
+            {
+                lines.Add($"[{section}]");
+                lines.Add(newProperty);
+            }
+            else
+            {
+                if (targetPropertyLine == 0)
+                {
+                    lines.Insert(targetSectionLine, newProperty);
+                }
+                else
+                {
+                    lines[targetPropertyLine - 1] = newProperty;
+                }
+            }
+
+
+            using (var sw = new StreamWriter(_iniFile))
+            {
+                foreach (var line in lines)
+                    sw.WriteLine(line);
+            }
         }
 
 
-        private bool IsValidLine(string inputLine)
+        private static bool IsValidLine(string inputLine)
         {
             var line = inputLine.Trim();
             return !line.StartsWith("//") && !line.StartsWith("#") && !line.StartsWith(";") && line.Length != 0;
@@ -101,6 +151,7 @@ namespace Config
         }
         */
 
+
         private List<List<string>> GetSections(IEnumerable<string> rawLines)
         {
             var lines = rawLines.ToArray();
@@ -108,13 +159,13 @@ namespace Config
             var section = new List<string>();
             var sections = new List<List<string>>();
             var lineCount = lines.Length;
-            
+
             var endFile = false;
             var foundSectionEntry = 0;
 
             for (var i = 1; i <= lineCount; i++)
             {
-                var line = lines[i-1];
+                var line = lines[i - 1];
                 if (_sectionMatch.IsMatch(line))
                 {
                     foundSectionEntry++;
