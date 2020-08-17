@@ -20,34 +20,18 @@ namespace Config
         }
 
 
-        private class Section
-        {
-            public string SectionTitle { get; set; }
-            public readonly Dictionary<string, string> Properties = new Dictionary<string, string>();
-
-            public Section(string sectionTitle)
-            {
-                SectionTitle = sectionTitle;
-            }
-        }
-
-
         public Dictionary<string, Dictionary<string, string>> Read()
         {
             var ini = new Dictionary<string, Dictionary<string, string>>();
 
             try
             {
-                var validLines = new List<string>();
-                foreach (var line in File.ReadLines(_iniFile))
-                    if (IsValidLine(line))
-                        validLines.Add(line);
+                var validLines = File.ReadLines(_iniFile).Where(IsValidLine);
 
-                var sections = DelimitBySection(validLines);
+                var sections = GetSections(validLines);
 
-                foreach (var section in sections)
+                foreach (var properties in sections)
                 {
-                    var properties = section.ToList();
                     var sectionTitle = properties.First();
                     properties.RemoveAt(0);
 
@@ -76,68 +60,9 @@ namespace Config
         }
 
 
-        public void WriteL(IEnumerable<string[]> triples, bool keepTemp = false)
+        public void WriteProperty(string section, string property, string value)
         {
-            // If the ini file doesn't exist, create it
-            if (File.Exists(_iniFile))
-            {
-                FileStream fs = File.Create(_iniFile);
-                fs.Dispose();
-            }
 
-            // Temporary file creation
-            var tmpFile = _iniFile + ".tmp~";
-            if (File.Exists(tmpFile))
-                File.Delete(tmpFile);
-
-            File.Copy(_iniFile, tmpFile);
-
-            var origin = File.ReadAllLines(_iniFile);
-
-            if (origin.Length == 0)
-            {
-            }
-            else
-            {
-            }
-        }
-
-
-        private void OutputSections(IEnumerable<Section> sections)
-        {
-        }
-
-
-        private List<Section> FormatTriples(IReadOnlyCollection<string[]> triples)
-        {
-            var sections = new List<Section>();
-            
-            var sectionTitles = new List<string>();
-            foreach (var triple in triples)
-            {
-                var s = triple[0];
-                if (sectionTitles.Contains(s))
-                    continue;
-                sectionTitles.Add(s);
-            }
-            
-            foreach (var sectionTitle in sectionTitles)
-                sections.Add(new Section(sectionTitle));
-
-            foreach (var triple in triples)
-            {
-                var s = triple[0];
-                var k = triple[1];
-                var v = triple[2];
-
-                foreach (var section in sections)
-                {
-                    if (section.SectionTitle == s)
-                        section.Properties[k] = v;
-                }
-            }
-
-            return sections;
         }
 
 
@@ -148,30 +73,91 @@ namespace Config
         }
 
 
-        private IEnumerable<IEnumerable<string>> DelimitBySection(IEnumerable<string> rawLines)
+        /*
+        private List<List<string>> GetSections(IEnumerable<string> rawLines)
         {
             var lines = rawLines.ToList();
 
-            var sectionIndices = new List<int>();
-            var sections = new List<IEnumerable<string>>();
+            var titleIndices = new List<int>();
+            var sections = new List<List<string>>();
 
             // Get list of section indices
             foreach (var line in lines)
                 if (_sectionMatch.IsMatch(line))
-                    sectionIndices.Add(lines.IndexOf(line));
+                    titleIndices.Add(lines.IndexOf(line));
 
             // manually add the delimiter, which is equal to IndexOfUpperBound + 1
-            sectionIndices.Add(lines.Count);
-            for (int i = 0; i < sectionIndices.Count - 1; i++)
+            titleIndices.Add(lines.Count);
+            for (int i = 0; i < titleIndices.Count - 1; i++)
             {
                 // ArraySegment provides ability to use offset, and no modification of origin array
                 var sectionSegment =
-                    new ArraySegment<string>(lines.ToArray(), sectionIndices[i],
-                        sectionIndices[i + 1] - sectionIndices[i]);
+                    new ArraySegment<string>(lines.ToArray(), titleIndices[i],
+                        titleIndices[i + 1] - titleIndices[i]);
                 sections.Add(sectionSegment.ToList());
             }
 
             return sections;
         }
+        */
+
+        private List<List<string>> GetSections(IEnumerable<string> rawLines)
+        {
+            var lines = rawLines.ToArray();
+
+            var section = new List<string>();
+            var sections = new List<List<string>>();
+            var lineCount = lines.Length;
+            
+            var endFile = false;
+            var foundSectionEntry = 0;
+
+            for (var i = 1; i <= lineCount; i++)
+            {
+                var line = lines[i-1];
+                if (_sectionMatch.IsMatch(line))
+                {
+                    foundSectionEntry++;
+
+                    if (foundSectionEntry == 2)
+                    {
+                        foundSectionEntry = 0;
+
+                        // Avoid Reference Clear
+                        var sectionCopy = new List<string>();
+                        foreach (var property in section)
+                            sectionCopy.Add(property.Clone().ToString());
+
+                        sections.Add(sectionCopy);
+                        section.Clear();
+
+                        section.Add(line);
+                        foundSectionEntry++;
+                        continue;
+                    }
+
+                    section.Add(line);
+                    continue;
+                }
+
+                if (foundSectionEntry < 2)
+                {
+                    section.Add(line);
+
+                    if (endFile)
+                    {
+                        sections.Add(section);
+                        break;
+                    }
+
+                    // Next loop execution will be the last valid line
+                    if (i == lineCount - 1)
+                        endFile = true;
+                }
+            }
+
+            return sections;
+        }
+
     }
 }
