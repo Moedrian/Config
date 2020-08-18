@@ -4,70 +4,61 @@ using System.Text.RegularExpressions;
 using System.Linq;
 
 
-namespace Config
+namespace Ini
 {
     public class Ini
     {
         private readonly string _iniFile;
-        private readonly bool _addSpace;
 
         private readonly Regex _sectionMatch = new Regex(@"^[;#\/\s]*?\[.+?\]$");
         private readonly Regex _propertyMatch = new Regex(@"^[;#\/\s]*?\w+?\s*?=.*?$");
-        private readonly char[] _validCommentCharacters = {'/', ';', '#'};
+        private readonly char[] _validCommentCharacters = { '/', ';', '#' };
 
-        public Ini(string filepath, bool addSpaceForProperty = false)
+        public Ini(string filepath)
         {
             _iniFile = filepath;
-            _addSpace = addSpaceForProperty;
+
+            // create the file if not exists
+            if (!File.Exists(_iniFile))
+            {
+                var fs = File.Create(_iniFile);
+                fs.Close();
+            }
         }
 
 
-        public Dictionary<string, Dictionary<string, string>> Read()
+        public Dictionary<string, Dictionary<string, string>> Read(bool ignoreEmptySection = true)
         {
             var ini = new Dictionary<string, Dictionary<string, string>>();
+            var validLines = File.ReadLines(_iniFile).Where(IsValidLine);
 
-            try
+            var sections = ignoreEmptySection ? GetSections(validLines).Where(o => o.Count > 1) : GetSections(validLines);
+
+            foreach (var properties in sections)
             {
-                var validLines = File.ReadLines(_iniFile).Where(IsValidLine);
+                var sectionTitle = properties.First().Trim('[', ']').Trim();
+                properties.RemoveAt(0);
 
-                var sections = GetSections(validLines);
+                var kvs = new Dictionary<string, string>();
 
-                foreach (var properties in sections)
+                foreach (var property in properties)
                 {
-                    var sectionTitle = properties.First();
-                    properties.RemoveAt(0);
-
-                    var kvs = new Dictionary<string, string>();
-
-                    foreach (var property in properties)
-                    {
-                        var kv = property.Split('=');
-                        kvs.Add(kv[0].Trim(), kv[1].Trim());
-                    }
-
-                    ini.Add(sectionTitle.Trim('[', ']').Trim(), kvs);
+                    var kv = property.Split('=');
+                    kvs.Add(kv[0].Trim(), kv[1].Trim());
                 }
-            }
-            catch (FileNotFoundException e)
-            {
-                ini.Add("Please Check File Existence", new Dictionary<string, string>
-                {
-                    {"Error Message", e.Message}
-                });
 
-                return ini;
+                ini.Add(sectionTitle, kvs);
             }
-
             return ini;
         }
 
 
-        public void WriteProperty(string section, string property, string value)
+        public void WriteProperty(string section, string property, string value, bool addSpace = false)
         {
             var lines = File.ReadLines(_iniFile).ToList();
             var lineCount = lines.Count;
 
-            var newProperty = _addSpace ? $"{property} = {value}" : $"{property}={value}";
+            var newProperty = addSpace ? $"{property} = {value}" : $"{property}={value}";
             var newSection = $"[{section}]";
 
             var targetSectionLine = 0;
@@ -76,19 +67,17 @@ namespace Config
             for (var i = 1; i <= lineCount; i++)
             {
                 var line = lines[i - 1];
-                if (line.Contains(section))
+                if (line.Contains(section) && _sectionMatch.IsMatch(line))
                 {
                     targetSectionLine = i;
                     continue;
                 }
 
-                if (targetSectionLine != 0)
-                {
-                    if (!_propertyMatch.IsMatch(line)) continue;
-                    if (property != line.Split('=')[0].Trim().TrimStart(_validCommentCharacters)) continue;
-                    targetPropertyLine = i;
-                    break;
-                }
+                if (targetSectionLine == 0) continue;
+                if (!_propertyMatch.IsMatch(line)) continue;
+                if (property != line.Split('=')[0].TrimStart(_validCommentCharacters).Trim()) continue;
+                targetPropertyLine = i;
+                break;
             }
 
             if (targetSectionLine == 0)
@@ -111,7 +100,6 @@ namespace Config
                 }
             }
 
-
             using (var sw = new StreamWriter(_iniFile))
             {
                 foreach (var line in lines)
@@ -127,7 +115,9 @@ namespace Config
         }
 
 
-        /*
+        /* using System;
+         * ArraySegment requires higher version of .Net Framework
+         *
         private List<List<string>> GetSections(IEnumerable<string> rawLines)
         {
             var lines = rawLines.ToList();
@@ -148,7 +138,7 @@ namespace Config
                 var sectionSegment =
                     new ArraySegment<string>(lines.ToArray(), titleIndices[i],
                         titleIndices[i + 1] - titleIndices[i]);
-                sections.Add(sectionSegment.ToList());
+                sections.Add(new List<string>(sectionSegment));
             }
 
             return sections;
@@ -156,38 +146,48 @@ namespace Config
         */
 
 
-        private List<List<string>> GetSections(IEnumerable<string> rawLines)
+        private List<List<string>> GetSections(IEnumerable<string> fileLines)
         {
-            var lines = rawLines.ToArray();
+            var lines = fileLines.ToArray();
 
             var section = new List<string>();
             var sections = new List<List<string>>();
             var lineCount = lines.Length;
 
-            var endFile = false;
-            var foundSectionEntry = 0;
+            var foundSectionCtr = 0;
 
             for (var i = 1; i <= lineCount; i++)
             {
                 var line = lines[i - 1];
+
                 if (_sectionMatch.IsMatch(line))
                 {
-                    foundSectionEntry++;
 
-                    if (foundSectionEntry == 2)
+                    foundSectionCtr++;
+
+                    if (foundSectionCtr == 2)
                     {
-                        foundSectionEntry = 0;
+                        foundSectionCtr = 0;
 
-                        // Avoid Reference Clear
+                        // avoid Reference Clear
                         var sectionCopy = new List<string>();
                         foreach (var property in section)
                             sectionCopy.Add(property.Clone().ToString());
 
+                        // clear this section for next section
                         sections.Add(sectionCopy);
                         section.Clear();
 
                         section.Add(line);
-                        foundSectionEntry++;
+                        foundSectionCtr++;
+
+                        // last line
+                        if (i == lineCount)
+                        {
+                            sections.Add(new List<string> { line });
+                            break;
+                        }
+
                         continue;
                     }
 
@@ -195,24 +195,11 @@ namespace Config
                     continue;
                 }
 
-                if (foundSectionEntry < 2)
-                {
+                if (foundSectionCtr < 2)
                     section.Add(line);
-
-                    if (endFile)
-                    {
-                        sections.Add(section);
-                        break;
-                    }
-
-                    // Next loop execution will be the last valid line
-                    if (i == lineCount - 1)
-                        endFile = true;
-                }
             }
 
             return sections;
         }
-
     }
 }
