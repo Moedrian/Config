@@ -20,7 +20,7 @@ using Ini;
 // First you need to create a new instance
 // Space for property is disabled by default, i.e. _property=_value 
 // instead of _property = _value
-var ini = new Ini(filepath:pathToIniFile);
+var ini = new Ini.Ini(filepath:pathToIniFile);
 
 // Returns a Dictionary<string, Dictionary<string, string>> variable
 // [section -> [key -> value],],

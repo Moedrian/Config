@@ -162,7 +162,6 @@ namespace Ini
 
                 if (_sectionMatch.IsMatch(line))
                 {
-
                     foundSectionCtr++;
 
                     if (foundSectionCtr == 2)
@@ -181,7 +180,7 @@ namespace Ini
                         section.Add(line);
                         foundSectionCtr++;
 
-                        // last line
+                        // last line section
                         if (i == lineCount)
                         {
                             sections.Add(new List<string> { line });
@@ -196,7 +195,12 @@ namespace Ini
                 }
 
                 if (foundSectionCtr < 2)
+                {
                     section.Add(line);
+                    // last line property
+                    if (i == lineCount)
+                        sections.Add(section);
+                }
             }
 
             return sections;
